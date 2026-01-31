@@ -12,12 +12,39 @@
         placeholder="https://example.com/room.jpg"
       />
 
-      <label for="prompt">Custom Prompt (optional)</label>
+      <label for="room">Room Type</label>
+      <select id="room" v-model="room">
+        <option value="Living Room">Living Room</option>
+        <option value="Bedroom">Bedroom</option>
+        <option value="Dining Room">Dining Room</option>
+        <option value="Kitchen">Kitchen</option>
+        <option value="Bathroom">Bathroom</option>
+        <option value="Office">Office</option>
+        <option value="Balcony">Balcony</option>
+        <option value="Garden">Garden</option>
+        <option value="Swimming Pool">Swimming Pool</option>
+      </select>
+
+      <label for="furnitureStyle">Furniture Style</label>
+      <select id="furnitureStyle" v-model="furnitureStyle">
+        <option value="Modern">Modern</option>
+        <option value="Scandinavian">Scandinavian</option>
+        <option value="Transitional">Transitional</option>
+        <option value="Rustic">Rustic</option>
+        <option value="Mid-Century Modern">Mid-Century Modern</option>
+        <option value="Urban Industrial">Urban Industrial</option>
+        <option value="Farmhouse">Farmhouse</option>
+        <option value="Coastal">Coastal</option>
+        <option value="Traditional">Traditional</option>
+        <option value="Modern Organic">Modern Organic</option>
+      </select>
+
+      <label for="furnitureItems">Furniture Items (optional)</label>
       <input
-        id="prompt"
-        v-model="prompt"
+        id="furnitureItems"
+        v-model="furnitureItems"
         type="text"
-        placeholder="modern minimalist furniture..."
+        placeholder="sofa, coffee table, rug, lamps..."
       />
 
       <div class="buttons">
@@ -60,7 +87,9 @@
 
 <script setup lang="ts">
 const imageUrl = ref('')
-const prompt = ref('')
+const room = ref('Living Room')
+const furnitureStyle = ref('Modern')
+const furnitureItems = ref('')
 const loading = ref(false)
 const error = ref('')
 const imageError = ref(false)
@@ -91,7 +120,11 @@ const submit = async (endpoint: string) => {
       method: 'POST',
       body: {
         image: imageUrl.value,
-        prompt: prompt.value || undefined
+        ...(endpoint === '/api/stage' && {
+          room: room.value,
+          furnitureStyle: furnitureStyle.value,
+          furnitureItems: furnitureItems.value || undefined
+        })
       }
     })
 
@@ -174,7 +207,8 @@ label {
   color: #333;
 }
 
-input {
+input,
+select {
   width: 100%;
   padding: 10px;
   border: 1px solid #ddd;
@@ -183,7 +217,8 @@ input {
   font-size: 14px;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: #0070f3;
 }

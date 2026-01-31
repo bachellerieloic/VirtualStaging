@@ -15,15 +15,15 @@ export default defineEventHandler(async (event) => {
 
   const webhookUrl = `${config.public.appUrl}/api/webhook`
 
-  // Use stability-ai inpainting model for virtual staging
+  // Use proplabs virtual staging model
   const prediction = await replicate.predictions.create({
-    version: "c11bac58203367db93a3c552bd49a25a5418458ddffb7e90dae55780765e26d6",
+    model: "proplabs/virtual-staging",
     input: {
       image: body.image,
-      prompt: body.prompt || "modern minimalist furniture, interior design, real estate photography, professional staging, 8k, photorealistic",
-      negative_prompt: "blurry, low quality, distorted, unrealistic",
-      num_inference_steps: 25,
-      guidance_scale: 7.5
+      room: body.room || "Living Room",
+      furniture_style: body.furnitureStyle || "Modern",
+      furniture_items: body.furnitureItems || "sofa, coffee table, rug, accent chairs, lamps, plants",
+      replicate_api_key: config.replicateApiToken
     },
     webhook: webhookUrl,
     webhook_events_filter: ["completed"]
