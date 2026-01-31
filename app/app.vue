@@ -1,23 +1,14 @@
 <template>
   <div class="app">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-content">
-        <div class="logo-section">
-          <img src="/oakwyn.png" alt="Oakwyn" class="logo" height="200px" />
-          <div class="logo-text">
-            <h1>Oakwyn</h1>
-            <p>Virtual Staging</p>
-          </div>
-        </div>
-      </div>
-    </header>
-
     <!-- Main Content -->
     <main class="main">
       <div class="container">
         <!-- Form Section -->
         <section class="form-section">
+          <div class="form-logo">
+            <img src="/oakwyn.png" alt="Oakwyn" />
+            <p>Virtual Staging</p>
+          </div>
       <label>Image Source</label>
       <div class="input-tabs">
         <button
@@ -229,9 +220,29 @@
                 <p class="modal-items">{{ selectedGalleryItem.furnitureItems }}</p>
                 <p class="modal-date">{{ formatDate(selectedGalleryItem.createdAt) }}</p>
               </div>
-              <button class="modal-download" @click="downloadImage">
-                <span>⬇</span> Download
-              </button>
+              <div class="modal-actions">
+                <button class="modal-delete" @click="confirmDelete" :disabled="deleting">
+                  <span v-if="!deleting">🗑</span>
+                  <span v-else class="spinner tiny"></span>
+                </button>
+                <button class="modal-download" @click="downloadImage">
+                  <span>⬇</span> Download
+                </button>
+              </div>
+            </div>
+
+            <!-- Delete Confirmation -->
+            <div v-if="showDeleteConfirm" class="delete-confirm-overlay" @click="showDeleteConfirm = false">
+              <div class="delete-confirm" @click.stop>
+                <p>Delete this staging?</p>
+                <p class="delete-hint">This cannot be undone.</p>
+                <div class="delete-actions">
+                  <button class="btn-cancel" @click="showDeleteConfirm = false">Cancel</button>
+                  <button class="btn-delete" @click="deleteStaging" :disabled="deleting">
+                    {{ deleting ? 'Deleting...' : 'Delete' }}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -269,9 +280,13 @@ const sliderPosition = ref(50)
 const comparisonRef = ref<HTMLElement | null>(null)
 const isDraggingSlider = ref(false)
 
+// Delete state
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+
 const room = ref('Living Room')
 const furnitureStyle = ref('Modern')
-const selectedFurnitureItems = ref<string[]>([...furnitureByRoom['Living Room']])
+const selectedFurnitureItems = ref<string[]>([...(furnitureByRoom['Living Room'] || [])])
 const loading = ref(false)
 const error = ref('')
 const imageError = ref(false)
@@ -304,7 +319,7 @@ const availableFurnitureItems = computed(() => furnitureByRoom[room.value] || []
 
 // Update selected items when room changes
 watch(room, (newRoom) => {
-  selectedFurnitureItems.value = [...furnitureByRoom[newRoom]]
+  selectedFurnitureItems.value = [...(furnitureByRoom[newRoom] || [])]
 })
 
 const selectAllFurniture = () => {
@@ -377,7 +392,7 @@ const startDrag = (event: MouseEvent | TouchEvent) => {
     if (!isDraggingSlider.value || !comparisonRef.value) return
 
     const rect = comparisonRef.value.getBoundingClientRect()
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    const clientX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : e.clientX
     const x = clientX - rect.left
     const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
     sliderPosition.value = percentage
@@ -431,6 +446,33 @@ const openGalleryItem = (item: any) => {
 
 const closeGalleryItem = () => {
   selectedGalleryItem.value = null
+  showDeleteConfirm.value = false
+}
+
+const confirmDelete = () => {
+  showDeleteConfirm.value = true
+}
+
+const deleteStaging = async () => {
+  if (!selectedGalleryItem.value || deleting.value) return
+
+  deleting.value = true
+
+  try {
+    await $fetch(`/api/predictions/${selectedGalleryItem.value.id}`, {
+      method: 'DELETE'
+    })
+
+    // Remove from local list
+    predictions.value = predictions.value.filter(p => p.id !== selectedGalleryItem.value.id)
+
+    // Close modal
+    closeGalleryItem()
+  } catch (e: any) {
+    error.value = e.data?.message || e.message || 'Failed to delete'
+  } finally {
+    deleting.value = false
+  }
 }
 
 const downloadImage = async () => {
@@ -488,8 +530,9 @@ const submit = async (endpoint: string) => {
       }
     })
 
-    currentPrediction.value = response as any
-    startPolling(response.id)
+    const result = response as { id: string; status: string }
+    currentPrediction.value = result
+    startPolling(result.id)
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Something went wrong'
     loading.value = false
@@ -550,52 +593,6 @@ html, body {
   flex-direction: column;
 }
 
-/* Header */
-.header {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  padding: 16px 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: saturate(180%) blur(20px);
-}
-
-.header-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-.logo-section {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.logo {
-  width: 120px;
-  height: auto;
-}
-
-.logo-text h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.4px;
-  color: #1d1d1d;
-  line-height: 1.2;
-}
-
-.logo-text p {
-  margin: 0;
-  margin-top: 2px;
-  font-size: 13px;
-  color: #a3a3a3;
-  font-weight: 400;
-  letter-spacing: 0.2px;
-}
-
 /* Main Content */
 .main {
   flex: 1;
@@ -616,6 +613,24 @@ html, body {
   margin-bottom: 80px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.form-logo {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.form-logo img {
+  width: 160px;
+  height: auto;
+}
+
+.form-logo p {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  color: #888;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 label {
@@ -1350,6 +1365,118 @@ select:focus {
 
 .modal-download span {
   font-size: 18px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.modal-delete {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #f5f5f5;
+  border: 1px solid #e8e8e8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.25s;
+}
+
+.modal-delete:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.modal-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner.tiny {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+/* Delete Confirmation */
+.delete-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  z-index: 20;
+}
+
+.delete-confirm {
+  background: white;
+  padding: 24px 32px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.delete-confirm p {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d1d1d;
+}
+
+.delete-hint {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: #888 !important;
+  margin-bottom: 20px !important;
+}
+
+.delete-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-cancel {
+  padding: 10px 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: #f5f5f5;
+}
+
+.btn-delete {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #ef4444;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Transition */
