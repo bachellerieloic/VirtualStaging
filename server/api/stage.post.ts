@@ -15,9 +15,9 @@ export default defineEventHandler(async (event) => {
 
   const webhookUrl = `${config.public.appUrl}/api/webhook`
 
-  // Use proplabs virtual staging model
+  // Use proplabs virtual staging model with specific version
   const prediction = await replicate.predictions.create({
-    model: "proplabs/virtual-staging",
+    version: "635d607efc6e3a6016ef6d655327cd35f3d792e84b8f110688b04498c6e94cfb",
     input: {
       image: body.image,
       room: body.room || "Living Room",
