@@ -29,11 +29,11 @@ export default defineEventHandler(async (event) => {
     webhook_events_filter: ["completed"]
   })
 
-  // Store prediction for tracking
+  // Store prediction for tracking (include beforeUrl)
   store.set(prediction.id, {
     id: prediction.id,
     status: prediction.status,
-    input: { image: body.image, prompt: body.prompt }
+    input: { image: body.image, beforeUrl: body.beforeUrl || body.image }
   })
 
   return {
