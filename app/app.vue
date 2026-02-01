@@ -9,6 +9,24 @@
             <img src="/oakwyn.png" alt="Oakwyn" />
             <p>Virtual Staging</p>
           </div>
+      <label>Staging Model</label>
+      <div class="model-toggle">
+        <button
+          type="button"
+          :class="['model-btn', { active: stagingModel === 'proplabs' }]"
+          @click="stagingModel = 'proplabs'"
+        >
+          PropLabs
+        </button>
+        <button
+          type="button"
+          :class="['model-btn', { active: stagingModel === 'banana' }]"
+          @click="stagingModel = 'banana'"
+        >
+          Nano Banana Pro
+        </button>
+      </div>
+
       <label>Image Source</label>
       <div class="input-tabs">
         <button
@@ -70,49 +88,67 @@
         />
       </div>
 
-      <label for="room">Room Type</label>
-      <select id="room" v-model="room">
-        <option value="Living Room">Living Room</option>
-        <option value="Bedroom">Bedroom</option>
-        <option value="Dining Room">Dining Room</option>
-        <option value="Kitchen">Kitchen</option>
-        <option value="Bathroom">Bathroom</option>
-        <option value="Office">Office</option>
-        <option value="Balcony">Balcony</option>
-        <option value="Garden">Garden</option>
-        <option value="Swimming Pool">Swimming Pool</option>
-      </select>
+      <!-- PropLabs controls -->
+      <template v-if="stagingModel === 'proplabs'">
+        <label for="room">Room Type</label>
+        <select id="room" v-model="room">
+          <option value="Living Room">Living Room</option>
+          <option value="Bedroom">Bedroom</option>
+          <option value="Dining Room">Dining Room</option>
+          <option value="Kitchen">Kitchen</option>
+          <option value="Bathroom">Bathroom</option>
+          <option value="Office">Office</option>
+          <option value="Balcony">Balcony</option>
+          <option value="Garden">Garden</option>
+          <option value="Swimming Pool">Swimming Pool</option>
+        </select>
 
-      <label for="furnitureStyle">Furniture Style</label>
-      <select id="furnitureStyle" v-model="furnitureStyle">
-        <option value="Modern">Modern</option>
-        <option value="Scandinavian">Scandinavian</option>
-        <option value="Transitional">Transitional</option>
-        <option value="Rustic">Rustic</option>
-        <option value="Mid-Century Modern">Mid-Century Modern</option>
-        <option value="Urban Industrial">Urban Industrial</option>
-        <option value="Farmhouse">Farmhouse</option>
-        <option value="Coastal">Coastal</option>
-        <option value="Traditional">Traditional</option>
-        <option value="Modern Organic">Modern Organic</option>
-      </select>
+        <label for="furnitureStyle">Furniture Style</label>
+        <select id="furnitureStyle" v-model="furnitureStyle">
+          <option value="Modern">Modern</option>
+          <option value="Scandinavian">Scandinavian</option>
+          <option value="Transitional">Transitional</option>
+          <option value="Rustic">Rustic</option>
+          <option value="Mid-Century Modern">Mid-Century Modern</option>
+          <option value="Urban Industrial">Urban Industrial</option>
+          <option value="Farmhouse">Farmhouse</option>
+          <option value="Coastal">Coastal</option>
+          <option value="Traditional">Traditional</option>
+          <option value="Modern Organic">Modern Organic</option>
+        </select>
 
-      <label>Furniture Items</label>
-      <div class="furniture-controls">
-        <button type="button" @click="selectAllFurniture" class="control-btn">Select All</button>
-        <button type="button" @click="deselectAllFurniture" class="control-btn">Deselect All</button>
-      </div>
-      <div class="furniture-items">
-        <div v-for="item in availableFurnitureItems" :key="item" class="checkbox-group">
-          <input
-            :id="`furniture-${item}`"
-            type="checkbox"
-            :value="item"
-            v-model="selectedFurnitureItems"
-          />
-          <label :for="`furniture-${item}`" class="checkbox-label">{{ item }}</label>
+        <label>Furniture Items</label>
+        <div class="furniture-controls">
+          <button type="button" @click="selectAllFurniture" class="control-btn">Select All</button>
+          <button type="button" @click="deselectAllFurniture" class="control-btn">Deselect All</button>
         </div>
-      </div>
+        <div class="furniture-items">
+          <div v-for="item in availableFurnitureItems" :key="item" class="checkbox-group">
+            <input
+              :id="`furniture-${item}`"
+              type="checkbox"
+              :value="item"
+              v-model="selectedFurnitureItems"
+            />
+            <label :for="`furniture-${item}`" class="checkbox-label">{{ item }}</label>
+          </div>
+        </div>
+      </template>
+
+      <!-- Nano Banana Pro controls -->
+      <template v-else>
+        <div class="model-info">
+          <p>Nano Banana Pro uses AI to intelligently furnish your space while preserving architectural elements like windows, doors, and flooring.</p>
+        </div>
+
+        <label for="extraPrompt">Custom Instructions (Optional)</label>
+        <textarea
+          id="extraPrompt"
+          v-model="extraPrompt"
+          placeholder="e.g., Add a modern minimalist living room with a gray sectional sofa, warm lighting, and plants..."
+          rows="3"
+        ></textarea>
+      </template>
 
           <div class="button-container">
             <button @click="submitStaging" :disabled="loading || !hasImage" class="btn btn-primary">
@@ -291,9 +327,15 @@ const furnitureByRoom: Record<string, string[]> = {
   'Swimming Pool': ['Sun loungers', 'Umbrellas', 'Pool chairs', 'Tables', 'Plants', 'Lighting']
 }
 
+// Staging model: 'proplabs' or 'banana'
+const stagingModel = ref<'proplabs' | 'banana'>('proplabs')
+
 // Input mode: 'upload' or 'url'
 const inputMode = ref<'upload' | 'url'>('upload')
 const imageUrl = ref('')
+
+// Nano Banana Pro extra prompt
+const extraPrompt = ref('')
 
 // File upload state
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -668,7 +710,8 @@ onMounted(() => {
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
 const submitStaging = async () => {
-  await submit('/api/stage')
+  const endpoint = stagingModel.value === 'banana' ? '/api/stage-banana' : '/api/stage'
+  await submit(endpoint)
 }
 
 const submit = async (endpoint: string) => {
@@ -685,17 +728,31 @@ const submit = async (endpoint: string) => {
   currentBeforeImage.value = displayImageUrl.value
 
   try {
+    // Build request body based on endpoint
+    let requestBody: Record<string, any> = {
+      image: imageToProcess,
+      beforeUrl // Store the original image URL for display
+    }
+
+    if (endpoint === '/api/stage') {
+      // PropLabs model parameters
+      requestBody = {
+        ...requestBody,
+        room: room.value,
+        furnitureStyle: furnitureStyle.value,
+        furnitureItems: selectedFurnitureItems.value.length > 0 ? selectedFurnitureItems.value.join(', ') : undefined
+      }
+    } else if (endpoint === '/api/stage-banana') {
+      // Nano Banana Pro parameters
+      requestBody = {
+        ...requestBody,
+        extraPrompt: extraPrompt.value || undefined
+      }
+    }
+
     const response = await $fetch(endpoint, {
       method: 'POST',
-      body: {
-        image: imageToProcess,
-        beforeUrl, // Store the original image URL for display
-        ...(endpoint === '/api/stage' && {
-          room: room.value,
-          furnitureStyle: furnitureStyle.value,
-          furnitureItems: selectedFurnitureItems.value.length > 0 ? selectedFurnitureItems.value.join(', ') : undefined
-        })
-      }
+      body: requestBody
     })
 
     const result = response as { id: string; status: string }
@@ -1070,6 +1127,82 @@ select:focus {
   padding: 40px;
   color: #d32f2f;
   text-align: center;
+}
+
+/* Model Toggle */
+.model-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.model-btn {
+  flex: 1;
+  padding: 14px 16px;
+  border: 2px solid #e8e8e8;
+  border-radius: 12px;
+  background: #f9f9f9;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s;
+  color: #666;
+}
+
+.model-btn:hover {
+  background: #f0f0f0;
+  border-color: #d8d8d8;
+}
+
+.model-btn.active {
+  background: linear-gradient(135deg, #b8a454 0%, #a59443 100%);
+  color: white;
+  border-color: #b8a454;
+  box-shadow: 0 2px 8px rgba(162, 159, 127, 0.25);
+}
+
+/* Model Info */
+.model-info {
+  background: linear-gradient(135deg, #f8f7f3 0%, #f5f4f0 100%);
+  border: 1px solid rgba(162, 159, 127, 0.2);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.model-info p {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* Textarea */
+textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  font-size: 15px;
+  font-family: inherit;
+  background: #f9f9f9;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: #1d1d1d;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+textarea::placeholder {
+  color: #b0b0b0;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #b8a454;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(162, 159, 127, 0.1);
 }
 
 /* Input Tabs */
@@ -1738,6 +1871,28 @@ select:focus {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .model-toggle {
+    gap: 6px;
+  }
+
+  .model-btn {
+    padding: 12px 12px;
+    font-size: 13px;
+  }
+
+  .model-info {
+    padding: 14px 16px;
+  }
+
+  .model-info p {
+    font-size: 13px;
+  }
+
+  textarea {
+    font-size: 14px;
+    min-height: 70px;
+  }
+
   .main {
     padding: 24px 16px;
   }
