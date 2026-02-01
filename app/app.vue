@@ -114,10 +114,12 @@
         </div>
       </div>
 
-          <button @click="submitStaging" :disabled="loading || !hasImage" class="btn btn-primary btn-full">
-            <span v-if="!loading">✨ Virtual Stage</span>
-            <span v-else>Processing...</span>
-          </button>
+          <div class="button-container">
+            <button @click="submitStaging" :disabled="loading || !hasImage" class="btn btn-primary">
+              <span v-if="!loading">✨ Virtual Stage</span>
+              <span v-else>Processing...</span>
+            </button>
+          </div>
         </section>
 
         <!-- Error State -->
@@ -127,28 +129,59 @@
 
         <!-- Results Section -->
         <div v-if="currentPrediction" class="results-section">
-          <div class="result-card">
-            <div v-if="currentPrediction.status === 'succeeded' && currentPrediction.output" class="result-image">
-              <img
-                :src="Array.isArray(currentPrediction.output) ? currentPrediction.output[0] : currentPrediction.output"
-                alt="Staged result"
-              />
-              <span class="badge">Complete</span>
-            </div>
-
-            <div v-if="currentPrediction.status === 'failed'" class="result-error">
-              <p>{{ currentPrediction.error || 'Processing failed' }}</p>
-            </div>
-
-            <div v-if="currentPrediction.status !== 'succeeded' && currentPrediction.status !== 'failed'" class="result-loading">
+          <!-- Loading State -->
+          <div v-if="currentPrediction.status !== 'succeeded' && currentPrediction.status !== 'failed'" class="result-card result-loading-card">
+            <div class="result-loading">
               <div class="spinner"></div>
               <p>{{ loadingMessage }}</p>
             </div>
           </div>
 
-          <div v-if="displayImageUrl" class="preview-card">
-            <p class="preview-label">Original</p>
-            <img :src="displayImageUrl" alt="Input preview" @error="imageError = true" class="preview-image" />
+          <!-- Error State -->
+          <div v-else-if="currentPrediction.status === 'failed'" class="result-card result-error-card">
+            <div class="result-error">
+              <p>{{ currentPrediction.error || 'Processing failed' }}</p>
+            </div>
+          </div>
+
+          <!-- Success: Before/After Slider -->
+          <div v-else-if="currentPrediction.status === 'succeeded' && currentPrediction.output" class="result-slider-card" ref="resultComparisonRef">
+            <div class="result-comparison">
+              <img
+                :src="Array.isArray(currentPrediction.output) ? currentPrediction.output[0] : currentPrediction.output"
+                class="result-after"
+                alt="Staged result"
+              />
+              <div
+                class="result-before"
+                :style="{ clipPath: `inset(0 ${100 - resultSliderPosition}% 0 0)` }"
+              >
+                <img :src="currentBeforeImage" alt="Original" />
+              </div>
+              <div
+                class="result-slider"
+                :style="{ left: `${resultSliderPosition}%` }"
+                @mousedown="startResultDrag"
+                @touchstart="startResultDrag"
+              >
+                <div class="slider-handle">
+                  <span class="slider-arrow left">◀</span>
+                  <span class="slider-arrow right">▶</span>
+                </div>
+              </div>
+              <div class="result-labels">
+                <span class="label-before">Before</span>
+                <span class="label-after">After</span>
+              </div>
+            </div>
+            <div class="result-actions">
+              <button class="result-action-btn delete" @click="deleteCurrentResult" title="Delete">
+                🗑
+              </button>
+              <button class="result-action-btn download" @click="downloadCurrentResult" title="Download">
+                ⬇
+              </button>
+            </div>
           </div>
         </div>
 
@@ -271,10 +304,16 @@ const uploadedFilePreview = ref('')  // Local blob URL for preview
 const uploading = ref(false)
 const isDragging = ref(false)
 
-// Before/After slider state
+// Before/After slider state (modal)
 const sliderPosition = ref(50)
 const comparisonRef = ref<HTMLElement | null>(null)
 const isDraggingSlider = ref(false)
+
+// Result slider state
+const resultSliderPosition = ref(50)
+const resultComparisonRef = ref<HTMLElement | null>(null)
+const isDraggingResultSlider = ref(false)
+const currentBeforeImage = ref('')  // Store before image when submitting
 
 // Delete state
 const showDeleteConfirm = ref(false)
@@ -322,7 +361,6 @@ const furnitureStyle = ref('Modern')
 const selectedFurnitureItems = ref<string[]>([...(furnitureByRoom['Living Room'] || [])])
 const loading = ref(false)
 const error = ref('')
-const imageError = ref(false)
 const predictions = ref<any[]>([])
 const selectedGalleryItem = ref<any>(null)
 const currentPrediction = ref<{
@@ -480,6 +518,71 @@ watch(selectedGalleryItem, () => {
   sliderPosition.value = 50
 })
 
+// Result slider handlers
+const startResultDrag = (event: MouseEvent | TouchEvent) => {
+  event.preventDefault()
+  isDraggingResultSlider.value = true
+
+  const handleMove = (e: MouseEvent | TouchEvent) => {
+    if (!isDraggingResultSlider.value || !resultComparisonRef.value) return
+
+    const container = resultComparisonRef.value.querySelector('.result-comparison')
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const clientX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : e.clientX
+    const x = clientX - rect.left
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
+    resultSliderPosition.value = percentage
+  }
+
+  const handleEnd = () => {
+    isDraggingResultSlider.value = false
+    document.removeEventListener('mousemove', handleMove)
+    document.removeEventListener('mouseup', handleEnd)
+    document.removeEventListener('touchmove', handleMove)
+    document.removeEventListener('touchend', handleEnd)
+  }
+
+  document.addEventListener('mousemove', handleMove)
+  document.addEventListener('mouseup', handleEnd)
+  document.addEventListener('touchmove', handleMove)
+  document.addEventListener('touchend', handleEnd)
+}
+
+// Reset result slider when new prediction starts
+watch(currentPrediction, (newVal, oldVal) => {
+  if (newVal && (!oldVal || newVal.id !== oldVal.id)) {
+    resultSliderPosition.value = 50
+  }
+})
+
+const downloadCurrentResult = async () => {
+  if (!currentPrediction.value?.output) return
+
+  try {
+    const output = currentPrediction.value.output
+    if (!output) return
+    const imageUrl = Array.isArray(output) ? output[0] : output
+    if (!imageUrl) return
+    const response = await fetch(imageUrl)
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `staged-${currentPrediction.value.id}.png`
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('Download failed:', err)
+  }
+}
+
+const deleteCurrentResult = () => {
+  currentPrediction.value = null
+  currentBeforeImage.value = ''
+}
+
 // Clear other input when switching tabs
 watch(inputMode, (newMode) => {
   if (newMode === 'upload') {
@@ -577,6 +680,9 @@ const submit = async (endpoint: string) => {
   const imageToProcess = activeImageUrl.value
   // For storage: use R2 URL for uploads, same URL for links
   const beforeUrl = inputMode.value === 'upload' ? uploadedFileUrl.value : imageUrl.value
+
+  // Store the display URL for the result slider (blob for uploads, URL for links)
+  currentBeforeImage.value = displayImageUrl.value
 
   try {
     const response = await $fetch(endpoint, {
@@ -737,9 +843,9 @@ select:focus {
 }
 
 .btn {
-  padding: 14px 20px;
+  padding: 14px 32px;
   border: none;
-  border-radius: 12px;
+  border-radius: 50px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -774,9 +880,10 @@ select:focus {
   color: #b5b5b5;
 }
 
-.btn-full {
-  width: 100%;
-  margin-top: 40px;
+.button-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
 }
 
 /* Error Banner */
@@ -792,14 +899,11 @@ select:focus {
 
 /* Results Section */
 .results-section {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 24px;
   margin-bottom: 60px;
 }
 
 .result-card,
-.preview-card {
+.result-slider-card {
   background: white;
   border-radius: 20px;
   overflow: hidden;
@@ -807,16 +911,133 @@ select:focus {
   border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
-.result-image {
-  position: relative;
-  width: 100%;
+.result-loading-card,
+.result-error-card {
+  padding: 60px 40px;
+  text-align: center;
 }
 
-.result-image img {
+.result-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.result-loading p {
+  margin: 0;
+  color: #666;
+  font-size: 15px;
+}
+
+/* Result Slider */
+.result-slider-card {
+  position: relative;
+}
+
+.result-comparison {
+  position: relative;
   width: 100%;
-  height: 400px;
-  object-fit: cover;
+  min-height: 350px;
+  max-height: 500px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.result-after {
+  width: 100%;
+  height: 100%;
+  max-height: 500px;
+  object-fit: contain;
   display: block;
+  background: #f5f5f5;
+}
+
+.result-before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.result-before img {
+  width: 100%;
+  height: 100%;
+  max-height: 500px;
+  object-fit: contain;
+}
+
+.result-slider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: white;
+  cursor: ew-resize;
+  transform: translateX(-50%);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+}
+
+.result-labels {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.result-labels span {
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.result-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.result-action-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.25s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.result-action-btn.download {
+  background: #b8a454;
+  color: white;
+}
+
+.result-action-btn.download:hover {
+  background: #a59443;
+  transform: scale(1.1);
+}
+
+.result-action-btn.delete {
+  background: white;
+}
+
+.result-action-btn.delete:hover {
+  background: #fee2e2;
+  transform: scale(1.1);
 }
 
 .badge {
@@ -829,11 +1050,6 @@ select:focus {
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
-}
-
-.result-loading {
-  padding: 60px 40px;
-  text-align: center;
 }
 
 .spinner {
@@ -854,22 +1070,6 @@ select:focus {
   padding: 40px;
   color: #d32f2f;
   text-align: center;
-}
-
-.preview-label {
-  padding: 16px 20px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #666;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.preview-image {
-  width: 100%;
-  height: 250px;
-  object-fit: cover;
-  display: block;
 }
 
 /* Input Tabs */
@@ -1593,18 +1793,39 @@ select:focus {
     font-size: 13px;
   }
 
-  .btn-full {
+  .button-container {
     margin-top: 24px;
-    padding: 16px;
   }
 
   .results-section {
-    grid-template-columns: 1fr;
-    gap: 16px;
+    margin-bottom: 40px;
   }
 
-  .result-image img {
-    height: 250px;
+  .result-comparison {
+    min-height: 250px;
+    max-height: 350px;
+  }
+
+  .result-after,
+  .result-before img {
+    max-height: 350px;
+  }
+
+  .result-actions {
+    top: 12px;
+    right: 12px;
+    gap: 6px;
+  }
+
+  .result-action-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .result-labels span {
+    padding: 4px 8px;
+    font-size: 10px;
   }
 
   .gallery-section {
