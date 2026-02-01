@@ -1,7 +1,11 @@
 const config = useRuntimeConfig()
 
-const R2_PUBLIC_URL = 'https://7c96f73f8ca4f2a353d10829c4f04a95.r2.cloudflarestorage.com/realestate'
 const R2_API_URL = `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/r2/buckets/realestate/objects`
+
+// Returns a proxy URL that serves images through our API
+export const getProxyUrl = (fileName: string): string => {
+  return `/api/images/${fileName}`
+}
 
 export const uploadToR2 = async (imageUrl: string, predictionId: string): Promise<string> => {
   try {
@@ -29,10 +33,11 @@ export const uploadToR2 = async (imageUrl: string, predictionId: string): Promis
       throw new Error(`R2 upload failed: ${uploadResponse.statusText} - ${errorText}`)
     }
 
-    const r2Url = `${R2_PUBLIC_URL}/${fileName}`
-    console.log('[R2] Upload successful:', r2Url)
+    // Return proxy URL instead of direct R2 URL
+    const proxyUrl = getProxyUrl(fileName)
+    console.log('[R2] Upload successful, proxy URL:', proxyUrl)
 
-    return r2Url
+    return proxyUrl
   } catch (error) {
     console.error('[R2] Upload error:', error)
     throw error

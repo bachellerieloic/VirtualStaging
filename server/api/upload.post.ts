@@ -1,6 +1,7 @@
+import { getProxyUrl } from '../utils/r2'
+
 const config = useRuntimeConfig()
 
-const R2_PUBLIC_URL = 'https://7c96f73f8ca4f2a353d10829c4f04a95.r2.cloudflarestorage.com/realestate'
 const R2_API_URL = `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/r2/buckets/realestate/objects`
 
 export default defineEventHandler(async (event) => {
@@ -48,11 +49,12 @@ export default defineEventHandler(async (event) => {
       throw new Error(`R2 upload failed: ${uploadResponse.statusText} - ${errorText}`)
     }
 
-    const r2Url = `${R2_PUBLIC_URL}/${fileName}`
-    console.log('[Upload] Before image uploaded:', r2Url)
+    // Return proxy URL instead of direct R2 URL
+    const proxyUrl = getProxyUrl(fileName)
+    console.log('[Upload] Before image uploaded, proxy URL:', proxyUrl)
 
     return {
-      url: r2Url,
+      url: proxyUrl,
       fileName
     }
   } catch (error) {

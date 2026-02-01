@@ -265,7 +265,8 @@ const imageUrl = ref('')
 // File upload state
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const uploadedFile = ref<File | null>(null)
-const uploadedFileUrl = ref('')  // R2 URL for Replicate
+const uploadedFileUrl = ref('')  // R2 URL for storage
+const uploadedFileBase64 = ref('')  // Base64 data URI for Replicate
 const uploadedFilePreview = ref('')  // Local blob URL for preview
 const uploading = ref(false)
 const isDragging = ref(false)
@@ -297,16 +298,16 @@ const currentPrediction = ref<{
 // Computed: check if we have an image ready (either uploaded or URL)
 const hasImage = computed(() => {
   if (inputMode.value === 'upload') {
-    // Need the R2 URL to be ready for processing
-    return !!uploadedFileUrl.value && !uploading.value
+    // Need the base64 to be ready for processing
+    return !!uploadedFileBase64.value && !uploading.value
   }
   return !!imageUrl.value
 })
 
-// Get the image URL for processing (R2 URL for uploads)
+// Get the image URL for processing (base64 for uploads, URL for links)
 const activeImageUrl = computed(() => {
   if (inputMode.value === 'upload') {
-    return uploadedFileUrl.value
+    return uploadedFileBase64.value
   }
   return imageUrl.value
 })
@@ -363,6 +364,13 @@ const uploadFile = async (file: File) => {
   // Create local preview immediately
   uploadedFilePreview.value = URL.createObjectURL(file)
 
+  // Read file as base64 for Replicate
+  const reader = new FileReader()
+  reader.onload = () => {
+    uploadedFileBase64.value = reader.result as string
+  }
+  reader.readAsDataURL(file)
+
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -377,6 +385,7 @@ const uploadFile = async (file: File) => {
     error.value = e.data?.message || e.message || 'Failed to upload image'
     uploadedFile.value = null
     uploadedFileUrl.value = ''
+    uploadedFileBase64.value = ''
     // Revoke preview on error
     if (uploadedFilePreview.value) {
       URL.revokeObjectURL(uploadedFilePreview.value)
@@ -393,6 +402,7 @@ const removeUploadedFile = () => {
   }
   uploadedFile.value = null
   uploadedFileUrl.value = ''
+  uploadedFileBase64.value = ''
   uploadedFilePreview.value = ''
   if (fileInputRef.value) {
     fileInputRef.value.value = ''
@@ -526,14 +536,17 @@ const submit = async (endpoint: string) => {
   loading.value = true
   currentPrediction.value = null
 
+  // For Replicate: use base64 for uploads, URL for links
   const imageToProcess = activeImageUrl.value
+  // For storage: use R2 URL for uploads, same URL for links
+  const beforeUrl = inputMode.value === 'upload' ? uploadedFileUrl.value : imageUrl.value
 
   try {
     const response = await $fetch(endpoint, {
       method: 'POST',
       body: {
         image: imageToProcess,
-        beforeUrl: imageToProcess, // Store the original image as "before"
+        beforeUrl, // Store the original image URL for display
         ...(endpoint === '/api/stage' && {
           room: room.value,
           furnitureStyle: furnitureStyle.value,
