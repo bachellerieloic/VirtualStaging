@@ -142,7 +142,7 @@
 
             <div v-if="currentPrediction.status !== 'succeeded' && currentPrediction.status !== 'failed'" class="result-loading">
               <div class="spinner"></div>
-              <p>{{ currentPrediction.status === 'processing' ? 'Creating your staged room...' : 'Preparing...' }}</p>
+              <p>{{ loadingMessage }}</p>
             </div>
           </div>
 
@@ -279,6 +279,43 @@ const isDraggingSlider = ref(false)
 // Delete state
 const showDeleteConfirm = ref(false)
 const deleting = ref(false)
+
+// Loading messages
+const loadingMessages = [
+  'Analyzing room dimensions...',
+  'Detecting natural light sources...',
+  'Calculating optimal furniture placement...',
+  'Selecting premium furniture pieces...',
+  'Matching your chosen style...',
+  'Adjusting shadows and reflections...',
+  'Rendering high-resolution textures...',
+  'Fine-tuning perspective angles...',
+  'Applying designer touches...',
+  'Polishing final details...',
+  'Almost there...'
+]
+const currentMessageIndex = ref(0)
+let messageInterval: ReturnType<typeof setInterval> | null = null
+
+const loadingMessage = computed(() => {
+  if (!currentPrediction.value) return 'Preparing...'
+  if (currentPrediction.value.status !== 'processing') return 'Preparing...'
+  return loadingMessages[currentMessageIndex.value]
+})
+
+const startLoadingMessages = () => {
+  currentMessageIndex.value = 0
+  messageInterval = setInterval(() => {
+    currentMessageIndex.value = (currentMessageIndex.value + 1) % loadingMessages.length
+  }, 3000)
+}
+
+const stopLoadingMessages = () => {
+  if (messageInterval) {
+    clearInterval(messageInterval)
+    messageInterval = null
+  }
+}
 
 const room = ref('Living Room')
 const furnitureStyle = ref('Modern')
@@ -567,6 +604,9 @@ const submit = async (endpoint: string) => {
 const startPolling = (id: string) => {
   if (pollInterval) clearInterval(pollInterval)
 
+  // Start cycling through fun loading messages
+  startLoadingMessages()
+
   pollInterval = setInterval(async () => {
     try {
       const status = await $fetch(`/api/status/${id}`)
@@ -587,12 +627,15 @@ const stopPolling = () => {
     clearInterval(pollInterval)
     pollInterval = null
   }
+  // Stop loading messages
+  stopLoadingMessages()
   // Refresh predictions gallery
   fetchPredictions()
 }
 
 onUnmounted(() => {
   stopPolling()
+  stopLoadingMessages()
 })
 </script>
 
@@ -1286,7 +1329,8 @@ select:focus {
 .modal-image {
   position: relative;
   width: 100%;
-  flex: 1;
+  min-height: 300px;
+  max-height: 60vh;
   overflow: hidden;
   background: #f5f5f5;
 }
@@ -1494,51 +1538,192 @@ select:focus {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .main {
+    padding: 24px 16px;
+  }
+
+  .container {
+    max-width: 100%;
+  }
+
   .form-section {
+    padding: 20px;
+    border-radius: 16px;
+    margin-bottom: 40px;
+  }
+
+  .form-logo img {
+    width: 120px;
+  }
+
+  .form-logo p {
+    font-size: 12px;
+  }
+
+  .input-tabs {
+    gap: 6px;
+  }
+
+  .tab-btn {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .dropzone {
     padding: 24px;
+    min-height: 120px;
+  }
+
+  .dropzone-preview {
+    min-height: 200px;
+    max-height: 300px;
+  }
+
+  .dropzone-preview img {
+    max-height: 300px;
+  }
+
+  .furniture-items {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .checkbox-label {
+    font-size: 13px;
+  }
+
+  .btn-full {
+    margin-top: 24px;
+    padding: 16px;
   }
 
   .results-section {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .result-image img {
-    height: 300px;
+    height: 250px;
+  }
+
+  .gallery-section {
+    margin-top: 60px;
   }
 
   .gallery-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .gallery-image-wrapper {
+    height: 120px;
+  }
+
+  .gallery-card-info {
+    padding: 12px;
+  }
+
+  .gallery-card-info h3 {
+    font-size: 14px;
   }
 
   .section-header h2 {
     font-size: 24px;
   }
 
+  /* Modal responsive */
+  .modal-overlay {
+    padding: 12px;
+  }
+
   .modal-content {
     max-height: 95vh;
-    max-width: 95%;
+    max-width: 100%;
+    border-radius: 16px;
+  }
+
+  .modal-close {
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+
+  .modal-image {
+    min-height: 200px;
+    max-height: 50vh;
+  }
+
+  .slider-handle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .slider-arrow {
+    font-size: 8px;
+  }
+
+  .comparison-labels span {
+    padding: 4px 8px;
+    font-size: 10px;
   }
 
   .modal-footer {
+    padding: 20px;
     grid-template-columns: 1fr;
     gap: 16px;
   }
 
+  .modal-info h2 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .modal-actions {
+    justify-content: stretch;
+  }
+
+  .modal-delete {
+    flex: 0 0 44px;
+  }
+
   .modal-download {
-    width: 100%;
+    flex: 1;
     justify-content: center;
   }
 
-  .modal-info h2 {
-    font-size: 20px;
+  .delete-confirm {
+    padding: 20px;
+    margin: 12px;
   }
 
-  .results-section {
-    grid-template-columns: 1fr;
+  .delete-confirm p {
+    font-size: 15px;
   }
+}
 
+/* Extra small screens */
+@media (max-width: 400px) {
   .form-section {
-    padding: 24px;
+    padding: 16px;
+  }
+
+  .furniture-items {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gallery-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .input-tabs {
+    flex-direction: column;
+  }
+
+  .tab-btn {
+    width: 100%;
   }
 }
 </style>
