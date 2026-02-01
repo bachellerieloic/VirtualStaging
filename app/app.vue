@@ -54,7 +54,7 @@
             <p>Uploading...</p>
           </div>
           <div v-else class="dropzone-preview">
-            <img :src="uploadedFileUrl" alt="Preview" />
+            <img :src="uploadedFilePreview" alt="Preview" />
             <button type="button" class="remove-file" @click.stop="removeUploadedFile">✕</button>
           </div>
         </div>
@@ -114,16 +114,10 @@
         </div>
       </div>
 
-          <div class="button-group">
-            <button @click="submitStaging" :disabled="loading || !hasImage" class="btn btn-primary">
-              <span v-if="!loading">✨ Virtual Stage</span>
-              <span v-else>Processing...</span>
-            </button>
-            <button @click="submitSunny" :disabled="loading || !hasImage" class="btn btn-secondary">
-              <span v-if="!loading">☀️ Make Sunny</span>
-              <span v-else>Processing...</span>
-            </button>
-          </div>
+          <button @click="submitStaging" :disabled="loading || !hasImage" class="btn btn-primary btn-full">
+            <span v-if="!loading">✨ Virtual Stage</span>
+            <span v-else>Processing...</span>
+          </button>
         </section>
 
         <!-- Error State -->
@@ -152,9 +146,9 @@
             </div>
           </div>
 
-          <div v-if="activeImageUrl" class="preview-card">
+          <div v-if="displayImageUrl" class="preview-card">
             <p class="preview-label">Original</p>
-            <img :src="activeImageUrl" alt="Input preview" @error="imageError = true" class="preview-image" />
+            <img :src="displayImageUrl" alt="Input preview" @error="imageError = true" class="preview-image" />
           </div>
         </div>
 
@@ -271,7 +265,8 @@ const imageUrl = ref('')
 // File upload state
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const uploadedFile = ref<File | null>(null)
-const uploadedFileUrl = ref('')
+const uploadedFileUrl = ref('')  // R2 URL for Replicate
+const uploadedFilePreview = ref('')  // Local blob URL for preview
 const uploading = ref(false)
 const isDragging = ref(false)
 
@@ -299,18 +294,27 @@ const currentPrediction = ref<{
   error?: string
 } | null>(null)
 
-// Computed: check if we have an image (either uploaded or URL)
+// Computed: check if we have an image ready (either uploaded or URL)
 const hasImage = computed(() => {
   if (inputMode.value === 'upload') {
-    return !!uploadedFileUrl.value
+    // Need the R2 URL to be ready for processing
+    return !!uploadedFileUrl.value && !uploading.value
   }
   return !!imageUrl.value
 })
 
-// Get the active image URL based on input mode
+// Get the image URL for processing (R2 URL for uploads)
 const activeImageUrl = computed(() => {
   if (inputMode.value === 'upload') {
     return uploadedFileUrl.value
+  }
+  return imageUrl.value
+})
+
+// Get the image URL for display (local blob for uploads)
+const displayImageUrl = computed(() => {
+  if (inputMode.value === 'upload') {
+    return uploadedFilePreview.value
   }
   return imageUrl.value
 })
@@ -356,6 +360,9 @@ const uploadFile = async (file: File) => {
   uploading.value = true
   error.value = ''
 
+  // Create local preview immediately
+  uploadedFilePreview.value = URL.createObjectURL(file)
+
   try {
     const formData = new FormData()
     formData.append('file', file)
@@ -370,14 +377,23 @@ const uploadFile = async (file: File) => {
     error.value = e.data?.message || e.message || 'Failed to upload image'
     uploadedFile.value = null
     uploadedFileUrl.value = ''
+    // Revoke preview on error
+    if (uploadedFilePreview.value) {
+      URL.revokeObjectURL(uploadedFilePreview.value)
+      uploadedFilePreview.value = ''
+    }
   } finally {
     uploading.value = false
   }
 }
 
 const removeUploadedFile = () => {
+  if (uploadedFilePreview.value) {
+    URL.revokeObjectURL(uploadedFilePreview.value)
+  }
   uploadedFile.value = null
   uploadedFileUrl.value = ''
+  uploadedFilePreview.value = ''
   if (fileInputRef.value) {
     fileInputRef.value.value = ''
   }
@@ -503,10 +519,6 @@ let pollInterval: ReturnType<typeof setInterval> | null = null
 
 const submitStaging = async () => {
   await submit('/api/stage')
-}
-
-const submitSunny = async () => {
-  await submit('/api/sunny')
 }
 
 const submit = async (endpoint: string) => {
@@ -668,14 +680,6 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(162, 159, 127, 0.1);
 }
 
-/* Button Group */
-.button-group {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 40px;
-}
-
 .btn {
   padding: 14px 20px;
   border: none;
@@ -714,28 +718,9 @@ select:focus {
   color: #b5b5b5;
 }
 
-.btn-secondary {
-  background: #f5f5f5;
-  color: #1d1d1d;
-  border: 1px solid #e8e8e8;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: white;
-  border-color: #e0e0e0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.btn-secondary:active:not(:disabled) {
-  background: #f9f9f9;
-}
-
-.btn-secondary:disabled {
-  background: #fafafa;
-  border-color: #f0f0f0;
-  cursor: not-allowed;
-  color: #d0d0d0;
+.btn-full {
+  width: 100%;
+  margin-top: 40px;
 }
 
 /* Error Banner */
@@ -893,9 +878,10 @@ select:focus {
 }
 
 .dropzone.has-file {
-  padding: 0;
+  padding: 8px;
   border-style: solid;
   border-color: #e0e0e0;
+  min-height: auto;
 }
 
 .dropzone-content {
@@ -924,14 +910,17 @@ select:focus {
 .dropzone-preview {
   position: relative;
   width: 100%;
-  height: 200px;
+  min-height: 300px;
+  max-height: 400px;
 }
 
 .dropzone-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-height: 400px;
+  object-fit: contain;
   border-radius: 10px;
+  background: #f5f5f5;
 }
 
 .remove-file {
@@ -1496,10 +1485,6 @@ select:focus {
     padding: 24px;
   }
 
-  .button-group {
-    grid-template-columns: 1fr;
-  }
-
   .results-section {
     grid-template-columns: 1fr;
   }
@@ -1510,10 +1495,6 @@ select:focus {
 
   .gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  }
-
-  .logo-text h1 {
-    font-size: 24px;
   }
 
   .section-header h2 {
@@ -1545,10 +1526,6 @@ select:focus {
 
   .form-section {
     padding: 24px;
-  }
-
-  .button-group {
-    grid-template-columns: 1fr;
   }
 }
 </style>
